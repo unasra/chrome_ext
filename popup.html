@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Recruiter Tools</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<!-- Header -->
+<div id="header">
+    <h1>Infoblox Recruiter Tools</h1>
+</div>
+
+<!-- Content area -->
+<div id="content">
+    <div id="aiSection" class="section">
+        <h3>AI Search</h3>
+        <div class="description">
+            Search to retrieve candidates based on the given Query.
+        </div>
+        <input type="text" id="aiInput">
+        <button id="aiSearch">Search</button>
+    </div>
+
+    <div id="indexSection" class="section hidden">
+        <h3>Rank Resumes</h3>
+        <div class="description">
+            Click the button below to index and rank candidate resumes.
+        </div>
+        <button id="indexButton">Index</button>
+    </div>
+
+    <div id="linkedinSection" class="section hidden">
+        <h3>LinkedIn Search</h3>
+        <div class="description">
+            Evaluate a LinkedIn profile against a job description.
+        </div>
+        <input type="text" id="linkedinInput" placeholder="Enter Linkedin URL for evaluation">
+        <button id="linkedinSearch">Submit</button>
+    </div>
+    
+    <div id="evaluatorSection" class="section hidden">
+        <h3>Candidate Evaluator</h3>
+        <div class="description">
+            Evaluate a particular candidate based on a query.
+        </div>
+        <input type="text" id="evaluatorInput" placeholder="Enter query to evaluate candidate">
+        <button id="evaluateButton">Evaluate</button>
+    </div>
+</div>
+
+<!-- Tabbed Footer -->
+<div id="footer">
+    <button class="tab active" data-section="aiSection">AI Search</button>
+    <button class="tab" data-section="indexSection">Rank Resumes</button>
+    <button class="tab" data-section="linkedinSection">LinkedIn Search</button>
+    <button class="tab" data-section="evaluatorSection">Candidate Evaluator</button>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

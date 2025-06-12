@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Search Results</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #101820;
+            color: #e0e0e0;
+        }
+
+        header {
+            background-color: #1a2530;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+
+        .logo {
+            height: 40px;
+            margin-right: 15px;
+        }
+
+        .header-content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .query-info {
+            margin-top: 5px;
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .results-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .result-card {
+            background-color: #1e2833;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            padding: 15px;
+            width: calc(33.333% - 20px);
+            box-sizing: border-box;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border-left: 5px solid #2a3642;
+        }
+
+        .result-card.match {
+            border-left: 5px solid #2ecc71;
+        }
+
+        .result-card.no-match {
+            border-left: 5px solid #e74c3c;
+        }
+
+        .result-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+        }
+
+        .result-title {
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 10px;
+            color: #56b9ff;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .match-badge {
+            font-size: 12px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            color: white;
+        }
+
+        .match-badge.yes {
+            background-color: #2ecc71;
+        }
+
+        .match-badge.no {
+            background-color: #e74c3c;
+        }
+
+        .result-snippet {
+            margin-bottom: 15px;
+            line-height: 1.5;
+            max-height: 200px;
+            overflow-y: auto;
+            color: #d0d0d0;
+        }
+
+        .result-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 10px;
+            border-top: 1px solid #2a3642;
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        .result-explanation {
+            background-color: #233140;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 14px;
+            max-height: 150px;
+            overflow-y: auto;
+            color: #d0d0d0;
+        }
+
+        .explanation-toggle {
+            background: none;
+            border: none;
+            color: #56b9ff;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 0;
+            text-decoration: underline;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 50px 0;
+            font-size: 18px;
+            color: #bbb;
+            background-color: #1e2833;
+            border-radius: 5px;
+            width: 100%;
+        }
+
+        .timestamp {
+            font-size: 14px;
+            color: rgba(255,255,255,0.7);
+        }
+
+        .filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .filter-btn {
+            background-color: #1e2833;
+            border: 1px solid #2a3642;
+            border-radius: 20px;
+            padding: 8px 15px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #d0d0d0;
+            transition: all 0.2s;
+        }
+
+        .filter-btn.active {
+            background-color: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+
+        .filter-btn:hover:not(.active) {
+            background-color: #2a3642;
+        }
+
+        @media (max-width: 1200px) {
+            .result-card {
+                width: calc(50% - 20px);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .result-card {
+                width: 100%;
+            }
+            
+            .header-left {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .logo {
+                margin-bottom: 10px;
+                margin-right: 0;
+            }
+        }
+
+        .highlight {
+            background-color: rgba(255, 255, 128, 0.3);
+            color: #fff;
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a2530;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #2a3642;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3a4652;
+        }
+    </style>
+</head>
+<body>
+<header>
+    <div class="header-left">
+        <img src="infoblox.png" alt="Infoblox Logo" class="logo">
+        <div class="header-content">
+            <h1>Resume Search Results</h1>
+            <div id="query-info" class="query-info">Loading results...</div>
+        </div>
+    </div>
+    <div id="timestamp" class="timestamp"></div>
+</header>
+
+<div class="filters">
+    <button class="filter-btn active" data-filter="all">All Resumes</button>
+    <button class="filter-btn" data-filter="match">Matches Only</button>
+    <button class="filter-btn" data-filter="no-match">Non-Matches Only</button>
+</div>
+
+<div id="results-container" class="results-container">
+    <!-- Results will be dynamically added here -->
+    <div class="no-results" id="loading-message">
+        <p>Loading search results...</p>
+    </div>
+</div>
+
+<script src="search_results.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Infoblox Payslips</title>
+    <link rel="stylesheet" href="index.css" />
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+    <img src="infoblox.png" alt="Infoblox" class="logo">
+    <h1 class="title">Payslips</h1>
+</header>
+
+<!-- Main container -->
+<main class="container">
+    <section class="details">
+        <h2>Details</h2>
+        <select id="monthFilter">
+            <option>Last 3 Months</option>
+            <option>Last 6 Months</option>
+            <option>Last 12 Months</option>
+        </select>
+
+        <div id="payslipList" class="payslip-list">
+            <!-- Payslips will be injected here -->
+        </div>
+    </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
