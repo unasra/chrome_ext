@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     resultCard.innerHTML = `
                             <div class="result-title">
                                 ${result.filename || 'Untitled Resume'}
-                                <span class="match-badge ${result.isMatch ? 'yes' : 'no'}">${result.isMatch ? 'Match' : 'No Match'}</span>
+                                <span class="match-badge ${result.isMatch ? 'YES' : 'NO'}">${result.isMatch ? 'Match' : 'No Match'}</span>
                             </div>
                             <div class="result-snippet">${highlightedSnippet}</div>
                             <div class="result-footer">

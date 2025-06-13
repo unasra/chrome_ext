@@ -146,8 +146,38 @@ document.getElementById('aiSearch').addEventListener('click', () => {
 });
 
 document.getElementById('indexButton').addEventListener('click', () => {
-    const indexUrl = 'https://yourdomain.com/index-resumes'; // Change this URL
-    chrome.tabs.create({ url: indexUrl });
+    // Execute the index_resumes_on_page.js script in the current active tab
+    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+        try {
+            // First inject the script
+            chrome.scripting.executeScript({
+                target: {tabId: tabs[0].id},
+                files: ['index_resumes_on_page.js']
+            }).then(() => {
+                // Increase delay to ensure script is fully loaded before sending the message
+                setTimeout(() => {
+                    console.log("Sending indexCandidates action to content script");
+                    chrome.tabs.sendMessage(tabs[0].id, {
+                        action: "indexCandidates"
+                    }, (response) => {
+                        console.log("Response from content script:", response);
+                        if (chrome.runtime.lastError) {
+                            console.error("Error sending message:", chrome.runtime.lastError);
+                        }
+                    });
+                }, 500); // 500ms delay to ensure script is fully loaded
+            }).catch(error => {
+                console.error("Error executing script:", error);
+            });
+
+            // Don't close the popup immediately to ensure message is sent
+            setTimeout(() => {
+                window.close();
+            }, 1000); // Close after 1 second to ensure communication completes
+        } catch (err) {
+            console.error("Error in indexButton click handler:", err);
+        }
+    });
 });
 
 document.getElementById('linkedinSearch').addEventListener('click', () => {
@@ -168,30 +198,39 @@ document.getElementById('evaluateButton').addEventListener('click', () => {
         console.log("Evaluation criteria entered:", criteria);
     }
 
-    // Execute the evaluation script in the current active tab
+    // Execute the search_resumes_on_page.js script in the current active tab
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-        // First inject the script (you would need to create evaluate_candidates.js)
-        chrome.scripting.executeScript({
-            target: {tabId: tabs[0].id},
-            files: ['search_resumes_on_page.js'] // Reusing the same script for now, would need a dedicated script
-        }).then(() => {
-            // Then send the criteria to the injected script
-            chrome.tabs.sendMessage(tabs[0].id, {
-                action: "evaluateCandidates",
-                criteria: criteria
-            }, (response) => {
-                console.log("Response from content script:", response);
-                if (chrome.runtime.lastError) {
-                    console.error("Error sending message:", chrome.runtime.lastError);
-                }
+        try {
+            // First inject the script
+            chrome.scripting.executeScript({
+                target: {tabId: tabs[0].id},
+                files: ['evaluate_resumes_on_page.js']
+            }).then(() => {
+                // Increase delay to ensure script is fully loaded before sending the message
+                setTimeout(() => {
+                    console.log("Sending evaluation criteria to content script:", criteria);
+                    chrome.tabs.sendMessage(tabs[0].id, {
+                        action: "evaluateCandidates",
+                        query: criteria
+                    }, (response) => {
+                        console.log("Response from content script:", response);
+                        if (chrome.runtime.lastError) {
+                            console.error("Error sending message:", chrome.runtime.lastError);
+                        }
+                    });
+                }, 500); // 500ms delay to ensure script is fully loaded
+            }).catch(error => {
+                console.error("Error executing script:", error);
             });
-        }).catch(error => {
-            console.error("Error executing script:", error);
-        });
+            
+            // Don't close the popup immediately to ensure message is sent
+            setTimeout(() => {
+                window.close();
+            }, 1000); // Close after 1 second to ensure communication completes
+        } catch (err) {
+            console.error("Error in evaluateButton click handler:", err);
+        }
     });
-
-    // Close the popup after executing the script
-    window.close();
 });
 
 // Tab switcher logic

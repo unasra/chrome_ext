@@ -65,6 +65,45 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
         return true;
     }
     
+    // Handle executing search from the index_resumes_on_page.js
+    else if (request.action === 'executeSearch') {
+        console.log("Received request to execute search with query:", request.query);
+
+        // Get the current tab
+        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+            if (chrome.runtime.lastError || !tabs || tabs.length === 0) {
+                console.error("Error getting current tab:", chrome.runtime.lastError);
+                sendResponse({success: false, error: "Could not get current tab"});
+                return;
+            }
+
+            const currentTab = tabs[0];
+
+            // Inject the search_resumes_on_page.js script
+            chrome.scripting.executeScript({
+                target: {tabId: currentTab.id},
+                files: ['evaluate_resumes_on_page.js']
+            }).then(() => {
+                // Wait for script to load then send the search message
+                setTimeout(() => {
+                    chrome.tabs.sendMessage(currentTab.id, {
+                        action: "evaluateCandidates",
+                        query: request.query
+                    }, (response) => {
+                        console.log("Search execution response:", response);
+                        sendResponse({success: true, response: response});
+                    });
+                }, 500);
+            }).catch(error => {
+                console.error("Error executing search script:", error);
+                sendResponse({success: false, error: error.message});
+            });
+        });
+
+        // Return true to indicate we'll send a response asynchronously
+        return true;
+    }
+
     // Return true for all message handlers to keep the channel open
     return true;
 });
