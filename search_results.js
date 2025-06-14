@@ -89,15 +89,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     resultCard.className = `result-card ${result.isMatch ? 'match' : 'no-match'}`;
                     resultCard.setAttribute('data-match', result.isMatch ? 'true' : 'false');
 
-                    // Highlight the query terms in the snippet
-                    const highlightedSnippet = highlightQuery(result.snippet || 'No preview available', query);
+                    // For LinkedIn profiles, use the snippet directly as it contains HTML
+                    // For other results, highlight the query terms
+                    const snippetContent = result.linkedinProfile ? 
+                        result.snippet : 
+                        highlightQuery(result.snippet || 'No preview available', query);
 
                     resultCard.innerHTML = `
                             <div class="result-title">
                                 ${result.filename || 'Untitled Resume'}
                                 <span class="match-badge ${result.isMatch ? 'YES' : 'NO'}">${result.isMatch ? 'Match' : 'No Match'}</span>
                             </div>
-                            <div class="result-snippet">${highlightedSnippet}</div>
+                            <div class="result-snippet">${snippetContent}</div>
                             <div class="result-footer">
                                 <button class="explanation-toggle">Show full explanation</button>
                                 <span>ID: ${result.id}</span>

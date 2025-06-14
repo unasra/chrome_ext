@@ -55,49 +55,157 @@
             console.log(`Found ${resumeTitleLinks.length} links with title="Resume"`);
             
             if (resumeTitleLinks.length > 0) {
-                resumeTitleLinks.forEach((link, index) => {
-                    console.log(`Processing Resume link ${index + 1}:`, link);
-                    try {
-                        // Simulate the event listener to extract the dynamically generated URL
-                        const clickEvent = new MouseEvent('click', {
-                            bubbles: true,
-                            cancelable: true,
-                            view: window
-                        });
+                // Create a status container to show progress
+                const statusContainer = createStatusContainer(resumeTitleLinks.length);
+                updateStatus(statusContainer, 0, resumeTitleLinks.length, "Starting to process resume links", 'pending');
 
-                        // Temporarily override window.open to intercept the generated URL
-                        const originalWindowOpen = window.open;
-                        let capturedUrl = null;
+                // Process links sequentially using async function
+                processResumeLinksSequentially(resumeTitleLinks, resumeLinks, statusContainer, resumePrefix, query);
 
-                        console.log("Opening a new wxindow to capture URL...");
-                        window.open = function(url) {
-                            console.log("Intercepted window.open call with URL:", url);
-                            capturedUrl = url; // Capture the URL
-                            return null; // Prevent the window from opening
-                        };
-                        console.log("Yeah , new window didnt open");
-
-                        // Dispatch the click event to trigger the event listener
-                        link.dispatchEvent(clickEvent);
-
-                        // Restore the original window.open function
-                        window.open = originalWindowOpen;
-
-                        console.log(capturedUrl)
-                        if (capturedUrl && capturedUrl.startsWith(resumePrefix)) {
-                            console.log(`Captured URL from Resume link ${index + 1}:`, capturedUrl);
-                            resumeLinks.push({
-                                url: capturedUrl,
-                                text: link.textContent.trim() || "Resume Link",
-                                element: link,
-                                source: "resume-title-click"
-                            });
-                        }
-                    } catch (err) {
-                        console.error(`Error processing Resume link ${index + 1}:`, err);
-                    }
-                });
+                // This function will continue asynchronously, so we return here
+                return;
+            } else {
+                // No Resume links found, continue with normal link checking
+                continueWithRegularSearch(resumeLinks, resumePrefix, query);
             }
+        } catch (error) {
+            console.error("Error in searchResumesOnPage:", error);
+            showNotification("Error: " + error.message);
+            return [];
+        }
+    }
+
+    /**
+     * Process resume links one by one, opening each in a new tab and capturing the URL
+     * @param {Array} links - Array of resume links to process
+     * @param {Array} resumeLinks - Array to store the captured URLs
+     * @param {HTMLElement} statusContainer - Container for status updates
+     * @param {string} resumePrefix - Prefix for resume URLs
+     * @param {string} query - Search query
+     */
+    async function processResumeLinksSequentially(links, resumeLinks, statusContainer, resumePrefix, query) {
+        try {
+            console.log(`Starting to process ${links.length} resume links sequentially`);
+
+            // Process each link one by one
+            for (let i = 0; i < links.length; i++) {
+                const link = links[i];
+                const linkText = link.textContent.trim() || `Resume Link ${i+1}`;
+
+                updateStatus(statusContainer, i, links.length,
+                    `Opening tab for link ${i+1}/${links.length}: ${linkText}`, 'pending');
+
+                try {
+                    // Notify background script to prepare for capturing the next tab
+                    chrome.runtime.sendMessage({
+                        action: 'prepareForTabCapture'
+                    }, async function(response) {
+                        if (chrome.runtime.lastError) {
+                            console.error("Error sending message to background:", chrome.runtime.lastError);
+                            return;
+                        }
+
+                        console.log("Background script is ready to capture tab:", response);
+
+                        // Click the link to open in a new tab
+                        // Using real click instead of simulated event to ensure proper behavior
+                        console.log(`Clicking link ${i+1}: ${linkText}`);
+                        link.click();
+
+                        // Wait for URL to be captured by background script
+                        try {
+                            // Listen for the captured URL from background script
+                            const capturedUrl = await waitForTabCapture();
+
+                            if (capturedUrl && capturedUrl.startsWith(resumePrefix)) {
+                                console.log(`Successfully captured URL from tab ${i+1}:`, capturedUrl);
+
+                                // Add to resumeLinks array
+                                resumeLinks.push({
+                                    url: capturedUrl,
+                                    text: linkText,
+                                    element: link,
+                                    source: "resume-title-click"
+                                });
+
+                                updateStatus(statusContainer, i, links.length,
+                                    `Captured URL for ${linkText}`, 'success');
+                            } else {
+                                console.warn(`Failed to capture valid URL for link ${i+1}`);
+                                updateStatus(statusContainer, i, links.length,
+                                    `Failed to capture URL for ${linkText}`, 'error');
+                            }
+                        } catch (err) {
+                            console.error(`Error waiting for tab ${i+1} capture:`, err);
+                            updateStatus(statusContainer, i, links.length,
+                                `Error: ${err.message}`, 'error');
+                        }
+
+                        // Add a delay between processing links
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+
+                        // If this was the last link, continue with the regular search
+                        if (i === links.length - 1) {
+                            updateStatus(statusContainer, links.length, links.length,
+                                `Completed processing ${links.length} resume links`, 'complete');
+                            continueWithRegularSearch(resumeLinks, resumePrefix, query);
+                        }
+                    });
+
+                    // Wait for the background communication to complete before moving to next link
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+
+                } catch (err) {
+                    console.error(`Error processing link ${i+1}:`, err);
+                    updateStatus(statusContainer, i, links.length,
+                        `Error processing ${linkText}: ${err.message}`, 'error');
+                }
+            }
+        } catch (error) {
+            console.error("Error in processResumeLinksSequentially:", error);
+            showNotification("Error processing resume links: " + error.message);
+
+            // Continue with regular search despite errors
+            continueWithRegularSearch(resumeLinks, resumePrefix, query);
+        }
+    }
+
+    /**
+     * Waits for the background script to capture a tab URL
+     * @returns {Promise<string>} - Promise that resolves with the captured URL
+     */
+    function waitForTabCapture() {
+        return new Promise((resolve, reject) => {
+            // Set up listener for messages from background script
+            const listener = function(message, sender, sendResponse) {
+                if (message.action === 'tabUrlCaptured') {
+                    // Remove the listener once we get the URL
+                    chrome.runtime.onMessage.removeListener(listener);
+                    resolve(message.url);
+                    sendResponse({received: true});
+                    return true;
+                }
+            };
+
+            chrome.runtime.onMessage.addListener(listener);
+
+            // Set a timeout to avoid hanging indefinitely
+            setTimeout(() => {
+                chrome.runtime.onMessage.removeListener(listener);
+                reject(new Error("Timeout waiting for tab URL capture"));
+            }, 10000); // 10 second timeout
+        });
+    }
+
+    /**
+     * Continue with regular search after processing resume links
+     * @param {Array} resumeLinks - Already collected resume links
+     * @param {string} resumePrefix - Prefix for resume URLs
+     * @param {string} query - Search query
+     */
+    function continueWithRegularSearch(resumeLinks, resumePrefix, query) {
+        try {
+            console.log("Continuing with regular link search");
 
             // 1b. Check all anchor elements on the page (as before)
             const allLinks = document.getElementsByTagName('a');
@@ -839,24 +947,136 @@
     }
 
     /**
-     * Generates a filename for the downloaded PDF
-     * @param {string} linkText - Text of the link
-     * @param {number} index - Index of the link
+     * Generates a filename for the downloaded PDF by finding candidate name on the page
+     * @param {string} linkText - Text of the link (used as fallback)
+     * @param {number} index - Index of the link (used as fallback)
      * @returns {string} - The generated filename
      */
     function generateFilename(linkText, index) {
+        // Try to find candidate name on the page
+        try {
+            // Find all span elements containing "Candidate Name" text
+            const candidateNameSpans = Array.from(document.querySelectorAll('span')).filter(span => 
+                span.textContent && span.textContent.includes('Candidate Name')
+            );
+            
+            console.log(`Found ${candidateNameSpans.length} spans containing "Candidate Name"`);
+            
+            if (candidateNameSpans.length > 0) {
+                // For each candidate name span, try to find a nearby link with title attribute
+                for (const span of candidateNameSpans) {
+                    // First check if there's a link in the parent element
+                    let parent = span.parentElement;
+                    if (parent) {
+                        const parentLinks = parent.querySelectorAll('a[title]');
+                        if (parentLinks.length > 0 && parentLinks[0].title) {
+                            console.log(`Found link with title in parent: ${parentLinks[0].title}`);
+                            return sanitizeFilename(parentLinks[0].title);
+                        }
+                        
+                        // Check siblings of the span
+                        if (parent.children) {
+                            for (const child of parent.children) {
+                                if (child !== span) {
+                                    const siblingLinks = child.querySelectorAll('a[title]');
+                                    if (siblingLinks.length > 0 && siblingLinks[0].title) {
+                                        console.log(`Found link with title in sibling: ${siblingLinks[0].title}`);
+                                        return sanitizeFilename(siblingLinks[0].title);
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Check parent's siblings
+                        const grandparent = parent.parentElement;
+                        if (grandparent && grandparent.children) {
+                            for (const uncle of grandparent.children) {
+                                if (uncle !== parent) {
+                                    const uncleLinks = uncle.querySelectorAll('a[title]');
+                                    if (uncleLinks.length > 0 && uncleLinks[0].title) {
+                                        console.log(`Found link with title in parent's sibling: ${uncleLinks[0].title}`);
+                                        return sanitizeFilename(uncleLinks[0].title);
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Search in a wider area - look for any link with title within 3 levels up or down
+                        let currentNode = span;
+                        for (let i = 0; i < 3; i++) {
+                            if (!currentNode.parentElement) break;
+                            currentNode = currentNode.parentElement;
+                            
+                            const nearbyLinks = currentNode.querySelectorAll('a[title]');
+                            if (nearbyLinks.length > 0 && nearbyLinks[0].title) {
+                                console.log(`Found link with title ${i+1} levels up: ${nearbyLinks[0].title}`);
+                                return sanitizeFilename(nearbyLinks[0].title);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Alternative approach: Look for any link near text that says "Candidate Name"
+            const allLinks = document.querySelectorAll('a[title]');
+            for (const link of allLinks) {
+                const linkText = link.textContent || '';
+                if (linkText.includes('Candidate Name') || 
+                    (link.previousElementSibling && link.previousElementSibling.textContent && 
+                     link.previousElementSibling.textContent.includes('Candidate Name'))) {
+                    console.log(`Found link with title related to candidate name: ${link.title}`);
+                    return sanitizeFilename(link.title);
+                }
+            }
+            
+            console.log("Could not find a suitable candidate name on the page");
+        } catch (error) {
+            console.error("Error finding candidate name:", error);
+        }
+        
+        // Fallback to original method if no candidate name found
+        console.log("Falling back to original filename generation method");
+        
         // Clean the link text to create a filename
         let filename = linkText.replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_').toLowerCase();
-
+        
         // Truncate if too long
         if (filename.length > 30) {
             filename = filename.substring(0, 30);
         }
-
+        
         // Add timestamp to avoid duplicate filenames
         const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').substring(0, 14);
-
+        
         return `resume_${filename}_${timestamp}.pdf`;
+    }
+
+    /**
+     * Sanitizes a string to be used as a filename
+     * @param {string} title - The title to sanitize
+     * @returns {string} - Sanitized filename
+     */
+    function sanitizeFilename(title) {
+        if (!title) return '';
+        
+        // Remove any leading/trailing whitespace
+        let sanitized = title.trim();
+        
+        // Replace special characters with underscores
+        sanitized = sanitized.replace(/[^\w\s]/g, '_');
+        
+        // Remove all spaces
+        sanitized = sanitized.replace(/\s+/g, '');
+        
+        // Replace multiple consecutive underscores with a single one
+        sanitized = sanitized.replace(/_+/g, '_');
+        
+        // Ensure the filename ends with .pdf
+        if (!sanitized.toLowerCase().endsWith('.pdf')) {
+            sanitized = `${sanitized}.pdf`;
+        }
+        
+        return sanitized;
     }
 
     // DO NOT automatically execute the search function when the script is loaded

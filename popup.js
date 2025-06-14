@@ -2,10 +2,10 @@
 function setupInterfaceBasedOnUrl(url) {
     // Define which sections should be enabled on which domains
     const sectionRules = {
-        'aiSection': ['efpv.fa.us6.oraclecloud.com/hcmUI/faces','fa-efpv-dev9-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/faces'],
-        'linkedinSection': ['efpv.fa.us6.oraclecloud.com/hcmUI/faces','fa-efpv-dev9-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/faces'],
-        'indexSection': ['efpv.fa.us6.oraclecloud.com/hcmUI/faces','fa-efpv-dev9-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/faces'],
-        'evaluatorSection': ['efpv.fa.us6.oraclecloud.com/hcmUI/faces','fa-efpv-dev9-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/faces']
+        'aiSection': ['efpv.fa.us6.oraclecloud.com/hcmUI/faces','fa-efpv-dev9-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI'],
+        'linkedinSection': ['efpv.fa.us6.oraclecloud.com/hcmUI/faces','fa-efpv-dev9-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI'],
+        'indexSection': ['efpv.fa.us6.oraclecloud.com/hcmUI/faces','fa-efpv-dev9-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI'],
+        'evaluatorSection': ['efpv.fa.us6.oraclecloud.com/hcmUI/faces','fa-efpv-dev9-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI']
     };
     
     // Process each section
@@ -181,10 +181,175 @@ document.getElementById('indexButton').addEventListener('click', () => {
 });
 
 document.getElementById('linkedinSearch').addEventListener('click', () => {
-    const query = document.getElementById('linkedinInput').value;
-    const processedQuery = `site:linkedin.com/in "${query}"`;
-    const linkedinUrl = `https://www.google.com/search?q=${encodeURIComponent(processedQuery)}`;
-    chrome.tabs.create({ url: linkedinUrl });
+    const query = document.getElementById('linkedinInput').value.trim();
+    
+    // Get query from input or extract from page
+    chrome.tabs.query({active: true, currentWindow: true}, async function(tabs) {
+        let finalQuery = query;
+        
+        // If no query provided, extract from page
+        if (!finalQuery) {
+            try {
+                console.log("No query provided, attempting to extract from page");
+                
+                // Execute script to extract text from the specified element
+                const extractionResults = await chrome.scripting.executeScript({
+                    target: {tabId: tabs[0].id},
+                    function: () => {
+                        // Get all elements with the specified class
+                        const editorElements = document.querySelectorAll('.af_richTextEditor_content.ck-content');
+                        
+                        // Log in the page context
+                        window.console.log("[Page Context] Searching for job description in page");
+                        window.console.log("[Page Context] Found", editorElements.length, "editor elements");
+                        
+                        // If we have at least 2 elements, get the text from the second one
+                        if (editorElements.length >= 1) {
+                            const fullText = editorElements[0].textContent || '';
+                            window.console.log("[Page Context] Found text content:", fullText.substring(0, 100) + "...");
+                            
+                            // Use regex to extract text between "bring" and "What success"
+                            const regex = /bring:([\s\S]*?)What success/i;
+                            window.console.log("[Page Context] Applying regex to extract job requirements");
+                            const match = fullText.match(regex);
+                            
+                            if (match && match[1]) {
+                                const extractedText = match[1].trim();
+                                window.console.log(`[Page Context] Regex match found, extracted ${extractedText.length} characters`);
+                                window.console.log("[Page Context] Extracted text:", extractedText.substring(0, 100) + "...");
+                                return extractedText;
+                            }
+                            window.console.log("[Page Context] Regex didn't match, returning full text");
+                            return fullText.trim(); // Return full text if regex doesn't match
+                        }
+                        window.console.log("[Page Context] Couldn't find required editor elements");
+                        return null;
+                    }
+                });
+                
+                // Check if extraction was successful
+                if (extractionResults && extractionResults[0] && extractionResults[0].result) {
+                    finalQuery = extractionResults[0].result;
+                    console.log("Extracted query from page:", finalQuery);
+                } else {
+                    console.log("Could not extract query from page");
+                    alert("Could not extract job description from page. Please enter a query manually.");
+                    return;
+                }
+            } catch (err) {
+                console.error("Error extracting text:", err);
+                alert("Error extracting text from page: " + err.message);
+                return;
+            }
+        }
+        
+        // Now we have a query either from input or extracted from page
+        // Send the query to the LinkedIn API endpoint
+        try {
+            console.log("Sending query to LinkedIn API:", finalQuery);
+
+            // Show loading notification
+            const loadingNotification = document.createElement('div');
+            loadingNotification.textContent = 'Sending request to LinkedIn API...';
+            loadingNotification.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#3498db; color:white; text-align:center; padding:10px;';
+            document.body.prepend(loadingNotification);
+
+            // Send the request
+            const response = await fetch('http://localhost:8000/linkedin', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ query: finalQuery })
+            });
+
+            console.log(`API response status: ${response.status} ${response.statusText}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            // Get the response data
+            const data = await response.json();
+            console.log("Received response from LinkedIn API:", data);
+
+            await chrome.scripting.executeScript({
+                target: {tabId: tabs[0].id},
+                function: (responseData) => {
+                    window.console.log("%c LinkedIn API Response:", "color: #0077B5; font-weight: bold; font-size: 14px;");
+                    window.console.log(responseData);
+
+                    // Create a temporary on-screen notification
+                    const notification = document.createElement('div');
+                    notification.textContent = 'LinkedIn API response received. Check browser console (F12) for details.';
+                    notification.style.cssText = 'position:fixed; bottom:20px; right:20px; background:#0077B5; color:white; padding:10px; border-radius:5px; z-index:9999; box-shadow:0 4px 8px rgba(0,0,0,0.2);';
+                    document.body.appendChild(notification);
+
+                    // Remove the notification after 5 seconds
+                    setTimeout(() => {
+                        notification.remove();
+                    }, 5000);
+                },
+                args: [data]
+            });
+
+            // Handle the response format
+            if (data.result) {
+                // Format the data for search_results.js format
+                const formattedResults = {
+                    query: finalQuery,
+                    results: [{
+                        id: 'linkedin-result',
+                        filename: data.result[0] || 'LinkedIn Search Result',
+                        isMatch: data.result[1] === 'YES',
+                        snippet: data.result.title || 'LinkedIn Search Result',
+                        explanation: data.result[2] || 'No explanation available',
+                        linkedinProfile: true
+                    }],
+                    timestamp: new Date().toISOString(),
+                    totalMatches: data.result.matchBadge === 'YES' ? 1 : 0
+                };
+
+                // Store in chrome.storage.local for search_results.html to display
+                chrome.storage.local.set({
+                    searchResults: formattedResults
+                }, function() {
+                    // Open search_results.html
+                    chrome.tabs.create({ url: 'search_results.html' });
+                });
+            } else {
+                // Fallback to existing format if result key is not present
+                const formattedResults = {
+                    query: finalQuery,
+                    results: data.profiles.map((profile, index) => ({
+                        id: `linkedin-${index}`,
+                        filename: profile.name || 'LinkedIn Profile',
+                        isMatch: profile.match === true,
+                        snippet: `<p><strong>Title:</strong> ${profile.title || 'N/A'}</p>
+                                  <p><strong>Location:</strong> ${profile.location || 'N/A'}</p>
+                                  <p><strong>Skills:</strong> ${profile.skills?.join(', ') || 'N/A'}</p>
+                                  <p><strong>Experience:</strong> ${profile.experience || 'N/A'}</p>
+                                  ${profile.url ? `<p><a href="${profile.url}" target="_blank" style="color: #56b9ff;">View Profile</a></p>` : ''}`,
+                        explanation: profile.analysis || 'No analysis available',
+                        linkedinProfile: true
+                    })),
+                    timestamp: new Date().toISOString(),
+                    totalMatches: data.profiles.filter(p => p.match === true).length
+                };
+
+                // Store in chrome.storage.local for search_results.html to display
+                chrome.storage.local.set({
+                    searchResults: formattedResults
+                }, function() {
+                    // Open search_results.html
+                    chrome.tabs.create({ url: 'search_results.html' });
+                });
+            }
+
+        } catch (error) {
+            console.error("Error processing LinkedIn query:", error);
+            alert("Error connecting to LinkedIn API: " + error.message);
+        }
+    });
 });
 
 document.getElementById('evaluateButton').addEventListener('click', () => {

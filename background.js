@@ -10,6 +10,10 @@ console.log("Background script initialized");
 // Global variable to ensure the background script remains active
 let keepAlive = true;
 
+// Variables for tab URL capturing
+let isCapturingTabUrls = false;
+let activeContentScriptTabId = null;
+
 // Main message listener for handling requests from content scripts
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     console.log("Background script received message:", request.action, "Data size:", 
@@ -68,6 +72,7 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     // Handle executing search from the index_resumes_on_page.js
     else if (request.action === 'executeSearch') {
         console.log("Received request to execute search with query:", request.query);
+        request.query = "QUERY: " + request.query; // Prefix the query for clarity
 
         // Get the current tab
         chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
@@ -82,12 +87,12 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
             // Inject the search_resumes_on_page.js script
             chrome.scripting.executeScript({
                 target: {tabId: currentTab.id},
-                files: ['evaluate_resumes_on_page.js']
+                files: ['search_resumes_on_page.js']
             }).then(() => {
                 // Wait for script to load then send the search message
                 setTimeout(() => {
                     chrome.tabs.sendMessage(currentTab.id, {
-                        action: "evaluateCandidates",
+                        action: "searchResumes",
                         query: request.query
                     }, (response) => {
                         console.log("Search execution response:", response);
@@ -103,9 +108,64 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
         // Return true to indicate we'll send a response asynchronously
         return true;
     }
+    
+    // Handle preparation for tab URL capturing
+    else if (request.action === 'prepareForTabCapture') {
+        console.log("Preparing to capture next tab URL");
+        isCapturingTabUrls = true;
+        activeContentScriptTabId = sender.tab.id;
+        
+        sendResponse({
+            success: true,
+            message: "Background script ready to capture tab URL"
+        });
+    }
 
     // Return true for all message handlers to keep the channel open
     return true;
+});
+
+// Listen for tab creation events
+chrome.tabs.onCreated.addListener(function(tab) {
+    console.log("New tab created:", tab.id);
+    
+    if (isCapturingTabUrls && activeContentScriptTabId) {
+        console.log("Tab created while capturing URLs, waiting for it to load");
+        
+        // Wait for the tab to finish loading to get the final URL
+        chrome.tabs.onUpdated.addListener(function tabLoadListener(tabId, changeInfo, updatedTab) {
+            // Check if this is the tab we're watching and it has finished loading
+            if (tabId === tab.id && changeInfo.status === 'complete') {
+                console.log("Tab finished loading, URL:", updatedTab.url);
+                
+                // Send the URL back to the content script
+                if (activeContentScriptTabId) {
+                    chrome.tabs.sendMessage(activeContentScriptTabId, {
+                        action: 'tabUrlCaptured',
+                        url: updatedTab.url,
+                        tabId: tabId
+                    }, function(response) {
+                        console.log("URL sent to content script, response:", response);
+                        
+                        // Close the tab after a short delay
+                        setTimeout(() => {
+                            chrome.tabs.remove(tabId, function() {
+                                if (chrome.runtime.lastError) {
+                                    console.error("Error closing tab:", chrome.runtime.lastError);
+                                }
+                            });
+                        }, 500);
+                    });
+                }
+                
+                // Reset capturing state
+                isCapturingTabUrls = false;
+                
+                // Remove this listener
+                chrome.tabs.onUpdated.removeListener(tabLoadListener);
+            }
+        });
+    }
 });
 
 // Make sure the background script stays active
