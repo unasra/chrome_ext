@@ -299,8 +299,8 @@ document.getElementById('linkedinSearch').addEventListener('click', () => {
                     query: finalQuery,
                     results: [{
                         id: 'linkedin-result',
-                        filename: data.result[0] || 'LinkedIn Search Result',
-                        isMatch: data.result[1] === 'YES',
+                        filename: 'LinkedIn Candidate',
+                        isMatch: data.result[1] === 'Yes',
                         snippet: data.result.title || 'LinkedIn Search Result',
                         explanation: data.result[2] || 'No explanation available',
                         linkedinProfile: true

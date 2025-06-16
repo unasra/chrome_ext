@@ -8,6 +8,7 @@
 (function() {
     // Store the search query passed from the popup
     let searchQuery = '';
+    let fileNamesId = [];
     
     // Flag to track if we've already processed a search to avoid duplicate execution
     let searchProcessed = false;
@@ -54,6 +55,24 @@
             const resumeTitleLinks = Array.from(document.querySelectorAll('a[title="Resume"]'));
             console.log(`Found ${resumeTitleLinks.length} links with title="Resume"`);
             
+            // Extract parent table IDs with "PSErlt" suffix for each resume link
+            resumeTitleLinks.forEach(link => {
+                // Find parent table with ID ending in "PSErlt"
+                let currentElement = link;
+                while (currentElement) {
+                    if (currentElement.tagName === 'TABLE' &&
+                        currentElement.id &&
+                        currentElement.id.endsWith('PSErlt')) {
+                        console.log(`Found parent table with ID: ${currentElement.id}`);
+                        fileNamesId.push(currentElement.id);
+                        break;
+                    }
+                    currentElement = currentElement.parentElement;
+                }
+            });
+
+            console.log("Collected table IDs:", fileNamesId);
+
             if (resumeTitleLinks.length > 0) {
                 // Create a status container to show progress
                 const statusContainer = createStatusContainer(resumeTitleLinks.length);
@@ -142,7 +161,7 @@
                         }
 
                         // Add a delay between processing links
-                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        await new Promise(resolve => setTimeout(resolve, 2000));
 
                         // If this was the last link, continue with the regular search
                         if (i === links.length - 1) {
@@ -289,32 +308,19 @@
                     linkObj.url = linkObj.url.replace('preview=true', 'preview=false');
                 }
             });
-            
-            // Filter out duplicate URLs by using a Set to track unique URLs
-            const uniqueUrls = new Set();
-            const uniqueResumeLinks = resumeLinks.filter(linkObj => {
-                if (uniqueUrls.has(linkObj.url)) {
-                    console.log(`Skipping duplicate URL: ${linkObj.url}`);
-                    return false;
-                }
-                uniqueUrls.add(linkObj.url);
-                return true;
-            });
 
-            // Display results
-            console.log(`Found ${resumeLinks.length} resume links (${uniqueResumeLinks.length} unique) on this page:`);
 
-            if (uniqueResumeLinks.length > 0) {
-                uniqueResumeLinks.forEach((item, index) => {
+            if (resumeLinks.length > 0) {
+                resumeLinks.forEach((item, index) => {
                     console.log(`${index + 1}. ${item.text}:`);
                     console.log(`   ${item.url}`);
                     console.log(`   Source: ${item.source}`);
                 });
 
                 // Fetch PDFs from all unique links
-                fetchPDFsFromLinks(uniqueResumeLinks, query);
+                fetchPDFsFromLinks(resumeLinks, query);
 
-                return uniqueResumeLinks;
+                return resumeLinks;
             } else {
                 console.log("No resume links found with the specified prefix.");
                 showNotification("No resume links found with the specified prefix.");
@@ -953,101 +959,106 @@
      * @returns {string} - The generated filename
      */
     function generateFilename(linkText, index) {
-        // Try to find candidate name on the page
-        try {
-            // Find all span elements containing "Candidate Name" text
-            const candidateNameSpans = Array.from(document.querySelectorAll('span')).filter(span => 
-                span.textContent && span.textContent.includes('Candidate Name')
-            );
+        // Check if we have a table ID for this index
+        if (fileNamesId && fileNamesId.length > index && fileNamesId[index]) {
+            const tableId = fileNamesId[index];
+            console.log(`Looking for candidate name in table with ID: ${tableId}`);
             
-            console.log(`Found ${candidateNameSpans.length} spans containing "Candidate Name"`);
-            
-            if (candidateNameSpans.length > 0) {
-                // For each candidate name span, try to find a nearby link with title attribute
-                for (const span of candidateNameSpans) {
-                    // First check if there's a link in the parent element
-                    let parent = span.parentElement;
-                    if (parent) {
-                        const parentLinks = parent.querySelectorAll('a[title]');
-                        if (parentLinks.length > 0 && parentLinks[0].title) {
-                            console.log(`Found link with title in parent: ${parentLinks[0].title}`);
-                            return sanitizeFilename(parentLinks[0].title);
-                        }
-                        
-                        // Check siblings of the span
-                        if (parent.children) {
-                            for (const child of parent.children) {
-                                if (child !== span) {
-                                    const siblingLinks = child.querySelectorAll('a[title]');
-                                    if (siblingLinks.length > 0 && siblingLinks[0].title) {
-                                        console.log(`Found link with title in sibling: ${siblingLinks[0].title}`);
-                                        return sanitizeFilename(siblingLinks[0].title);
+            try {
+                // Find the table with the matching ID
+                const table = document.getElementById(tableId);
+                if (table) {
+                    // Look for spans containing "Candidate Name" within this specific table
+                    const candidateNameSpans = Array.from(table.querySelectorAll('span')).filter(span => 
+                        span.textContent && span.textContent.includes('Candidate Name')
+                    );
+                    
+                    console.log(`Found ${candidateNameSpans.length} spans containing "Candidate Name" in table ${tableId}`);
+                    
+                    if (candidateNameSpans.length > 0) {
+                        // For each candidate name span in this table, find a nearby link with title attribute
+                        for (const span of candidateNameSpans) {
+                            // Check for links with title in parent element
+                            let parent = span.parentElement;
+                            if (parent) {
+                                const parentLinks = parent.querySelectorAll('a[title]');
+                                if (parentLinks.length > 0 && parentLinks[0].title) {
+                                    console.log(`Found link with title in parent: ${parentLinks[0].title}`);
+                                    return sanitizeFilename(parentLinks[0].title);
+                                }
+                                
+                                // Check siblings of the span
+                                if (parent.children) {
+                                    for (const child of parent.children) {
+                                        if (child !== span) {
+                                            const siblingLinks = child.querySelectorAll('a[title]');
+                                            if (siblingLinks.length > 0 && siblingLinks[0].title) {
+                                                console.log(`Found link with title in sibling: ${siblingLinks[0].title}`);
+                                                return sanitizeFilename(siblingLinks[0].title);
+                                            }
+                                        }
                                     }
                                 }
-                            }
-                        }
-                        
-                        // Check parent's siblings
-                        const grandparent = parent.parentElement;
-                        if (grandparent && grandparent.children) {
-                            for (const uncle of grandparent.children) {
-                                if (uncle !== parent) {
-                                    const uncleLinks = uncle.querySelectorAll('a[title]');
-                                    if (uncleLinks.length > 0 && uncleLinks[0].title) {
-                                        console.log(`Found link with title in parent's sibling: ${uncleLinks[0].title}`);
-                                        return sanitizeFilename(uncleLinks[0].title);
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Search in a wider area - look for any link with title within 3 levels up or down
-                        let currentNode = span;
-                        for (let i = 0; i < 3; i++) {
-                            if (!currentNode.parentElement) break;
-                            currentNode = currentNode.parentElement;
-                            
-                            const nearbyLinks = currentNode.querySelectorAll('a[title]');
-                            if (nearbyLinks.length > 0 && nearbyLinks[0].title) {
-                                console.log(`Found link with title ${i+1} levels up: ${nearbyLinks[0].title}`);
-                                return sanitizeFilename(nearbyLinks[0].title);
                             }
                         }
                     }
+                    
+                    // If we couldn't find a candidate name span with link, look for any link with title in this table
+                    const tableLinks = table.querySelectorAll('a[title]');
+                    if (tableLinks.length > 0) {
+                        console.log(`Found link with title in table ${tableId}: ${tableLinks[0].title}`);
+                        return sanitizeFilename(tableLinks[0].title);
+                    }
+                    
+                    // Look for a link whose text contains the candidate's name
+                    const candidateLinks = Array.from(table.querySelectorAll('a')).filter(link => 
+                        link.textContent && 
+                        !link.textContent.includes('Resume') && 
+                        link.textContent.trim().length > 0
+                    );
+                    
+                    if (candidateLinks.length > 0) {
+                        console.log(`Found potential candidate link in table ${tableId}: ${candidateLinks[0].textContent}`);
+                        return sanitizeFilename(candidateLinks[0].textContent);
+                    }
+                } else {
+                    console.log(`Table with ID ${tableId} not found`);
                 }
+            } catch (error) {
+                console.error(`Error finding candidate name in table ${tableId}:`, error);
             }
             
-            // Alternative approach: Look for any link near text that says "Candidate Name"
-            const allLinks = document.querySelectorAll('a[title]');
-            for (const link of allLinks) {
-                const linkText = link.textContent || '';
-                if (linkText.includes('Candidate Name') || 
-                    (link.previousElementSibling && link.previousElementSibling.textContent && 
-                     link.previousElementSibling.textContent.includes('Candidate Name'))) {
-                    console.log(`Found link with title related to candidate name: ${link.title}`);
-                    return sanitizeFilename(link.title);
-                }
-            }
-            
-            console.log("Could not find a suitable candidate name on the page");
-        } catch (error) {
-            console.error("Error finding candidate name:", error);
+            // If we get here, we couldn't find a name in the table, but we still have the table ID
+            // Use the table ID as part of the filename
+            console.log(`Using table ID ${tableId} for filename`);
+            const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').substring(0, 14);
+            return `resume_table_${tableId.replace(/[^a-z0-9]/gi, '_')}_${timestamp}.pdf`;
         }
         
-        // Fallback to original method if no candidate name found
-        console.log("Falling back to original filename generation method");
-        
-        // Clean the link text to create a filename
+        // If we don't have a table ID for this index, fall back to the original method
+        try {
+            // Find all span elements containing "Candidate Name" text (global search as fallback)
+            const candidateNameSpans = Array.from(document.querySelectorAll('span')).filter(span =>
+                span.textContent && span.textContent.includes('Candidate Name')
+            );
+
+            console.log(`Fallback: Found ${candidateNameSpans.length} spans containing "Candidate Name"`);
+
+            if (candidateNameSpans.length > 0) {
+                // For each candidate name span, try to find a nearby link with title attribute
+                // ...existing code for fallback search...
+            }
+        } catch (error) {
+            console.error("Error in fallback name search:", error);
+        }
+
+        // Final fallback to original method
+        console.log("Using original filename generation method");
         let filename = linkText.replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_').toLowerCase();
-        
-        // Truncate if too long
         if (filename.length > 30) {
             filename = filename.substring(0, 30);
         }
-        
-        // Add timestamp to avoid duplicate filenames
         const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').substring(0, 14);
-        
         return `resume_${filename}_${timestamp}.pdf`;
     }
 

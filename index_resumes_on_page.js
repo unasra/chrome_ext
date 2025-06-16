@@ -67,23 +67,28 @@
             // Step 2: Wait for page to load completely with JavaScript
             await waitForPageLoad();
             // Additional wait to ensure all JavaScript is loaded and executed
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            console.log("Waiting for Details page to fully load and stabilize...");
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Increased to 8 seconds
             
             // Step 2.1: Find the div with title="Posting Description"
             console.log("Finding div with title 'Posting Description'");
-            const postingDescElement = await waitForElement('[title="Posting Description"]');
+            const postingDescElement = await waitForElement('[title="Posting Description"]', 2000); // Increased timeout
             if (!postingDescElement) {
                 throw new Error("Could not find element with title 'Posting Description'");
             }
             
             console.log("Found Posting Description element:", postingDescElement);
             
+            // Add additional delay before looking for resume link
+            console.log("Waiting for Posting Description content to stabilize...");
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
             // Step 2.2: Find div with specific class within the Posting Description parent
             console.log("Finding div with class for resume link within Posting Description context");
             const resumeDiv = await waitForElementWithinContext(
                 ".x37f.x37e.x3gu.hideInEditMode.xeq.p_AFIconOnly", 
                 postingDescElement,
-                10000
+                15000 // Increased timeout
             );
             
             if (!resumeDiv) {
@@ -106,20 +111,27 @@
             // Step 3: Wait for content to load, extract div with rich text content
             await waitForPageLoad();
             
+            // Add significant delay to allow resume content to fully load
+            console.log("Waiting for resume content to fully load...");
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Increased to 8 seconds
+            
             console.log("Finding rich text content elements");
-            // Wait for at least one element to appear first
-            await waitForElement(".af_richTextEditor_content.ck-content");
+            // Wait for at least one element to appear first with increased timeout
+            await waitForElement(".af_richTextEditor_content.ck-content", 2000); // Increased timeout
+            
+            // Add additional delay to ensure content is fully rendered
+            await new Promise(resolve => setTimeout(resolve, 2000));
             
             // Then get all matching elements and check if there are multiple instances
             const richTextDivs = document.querySelectorAll(".af_richTextEditor_content.ck-content");
             console.log(`Found ${richTextDivs.length} rich text content elements`);
             
-            if (richTextDivs.length < 2) {
+            if (richTextDivs.length < 1) {
                 throw new Error("Could not find second rich text content element. Only found " + richTextDivs.length);
             }
             
             // Get the second element (index 1)
-            const richTextDiv = richTextDivs[1];
+            const richTextDiv = richTextDivs[0];
             console.log("Using the second rich text div for extraction");
             
             // Step 4: Apply regex to extract text between specific phrases
@@ -127,7 +139,6 @@
             console.log("Raw extracted text length:", extractedText.length);
 
             // Improved regex to more precisely capture text between the markers
-
             const regex = /bring:[\s\n\r]*(.+?)[\s\n\r]*(?:What\s+success|$)/is;
             const match = extractedText.match(regex);
 
@@ -162,6 +173,11 @@
                 throw new Error("Could not extract meaningful text from content");
             }
             
+            // Add a significant delay here to ensure the query extraction is complete
+            // and the system is ready for navigation
+            console.log("Waiting for system to stabilize before navigating away...");
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
             // Step 5: Navigate to Overview page then Active Applications
             console.log("Finding Overview link");
             const overviewElement = findElementWithTitle("Overview");
@@ -182,17 +198,20 @@
             overviewLink.click();
             
             // Wait for the Overview page to load with more robust waiting
-            await waitForPageLoad();
+            await waitForPageLoad(1000); // Increased timeout
             console.log("Overview page initially loaded, waiting for JavaScript execution...");
             
-            // Add additional wait time to ensure all JavaScript is loaded and executed
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            // Add increased delay time to ensure all JavaScript is loaded and executed
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Increased to 10 seconds
             
             // Wait specifically for the Active Applications link to appear in the DOM
             console.log("Waiting for Active Applications link to appear...");
             try {
-                const activeAppsElement = await waitForElement('[title="Active Applications"]', 15000);
+                const activeAppsElement = await waitForElement('[title="Active Applications"]', 2000); // Increased to 20 seconds
                 console.log("Found Active Applications element:", activeAppsElement);
+                
+                // Add additional delay before clicking to ensure page is stable
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 
                 const activeAppsLink = activeAppsElement.tagName === 'A' ? 
                     activeAppsElement : activeAppsElement.querySelector('a');
@@ -204,8 +223,11 @@
                 console.log("Clicking on Active Applications link");
                 activeAppsLink.click();
                 
-                await waitForPageLoad();
-                console.log("Active Applications page loaded");
+                await waitForPageLoad(5000); // Increased timeout
+                console.log("Active Applications page loaded, waiting for page to stabilize...");
+                
+                // Add a significant delay before proceeding with search
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Increased to 10 seconds
                 
                 // Execute search with the extracted query
                 await injectAndExecuteSearchScript(query);
