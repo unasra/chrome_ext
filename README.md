@@ -2,6 +2,16 @@
 
 A Chrome Extension designed to enhance the Oracle Recruiter experience with AI-powered features for candidate evaluation, resume extraction, and LinkedIn search integration.
 
+## UI demonstration 
+
+### Popup Interface
+
+![img1.png](img1.png)
+
+### Search Results
+
+![img2.png](img2.png)
+
 ## Overview
 
 This Chrome Extension integrates with Oracle's recruitment platform to provide advanced AI assistance during the hiring process. The extension helps recruiters extract candidate information, search through resumes, and match candidates with job requirements using modern AI techniques.
